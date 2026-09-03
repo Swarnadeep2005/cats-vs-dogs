@@ -1,0 +1,27 @@
+# Central config — nothing in the code should be hardcoded that lives here.
+# Change values here to run different experiments without touching source code.
+
+data:
+  raw_dir: "data/raw"              # where the extracted Kaggle dataset lands
+  train_dir: "data/raw/train"
+  test_dir: "data/raw/test"
+  image_size: [256, 256]
+  batch_size: 32
+  validation_split: 0.2            # carved out of train_dir
+  seed: 42
+
+model:
+  architecture: "mobilenetv2"       # "baseline_cnn" or "mobilenetv2"
+  dropout: 0.2
+
+training:
+  epochs: 15
+  fine_tune_epochs: 5
+  learning_rate: 0.001
+  fine_tune_learning_rate: 0.00001
+  early_stopping_patience: 3
+
+paths:
+  model_output_dir: "model"
+  model_version: "v1"
+  logs_dir: "logs"

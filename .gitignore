@@ -1,0 +1,17 @@
+data/raw/
+data/*.zip
+model/*.h5
+model/*.keras
+model/*.tflite
+kaggle.json
+.kaggle/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.env
+.ipynb_checkpoints/
+logs/
+*.log
+.DS_Store
