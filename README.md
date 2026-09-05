@@ -87,10 +87,31 @@ and appends its config + final test/validation accuracy to
 `logs/runs.json`, so results from both architectures can be compared
 side by side.
 
-| Architecture | Val Accuracy | Test Accuracy |
-|---|---|---|
-| baseline_cnn | _pending full run_ | _pending full run_ |
-| mobilenetv2 | _pending full run_ | _pending full run_ |
+| Architecture | Val Accuracy | Test Accuracy | Test Loss | Epochs Trained |
+|---|---|---|---|---|
+| baseline_cnn | 49.85% | 48.08% | 0.6934 | 5 |
+| mobilenetv2 | 99.36% | 99.24% | 0.0189 | 5 (+5 fine-tune) |
+
+**Note on the baseline result:** 48% test accuracy is essentially
+chance-level for a binary classifier, and a test loss of 0.6934 is
+suspiciously close to `ln(2) ≈ 0.693` — the loss you get when a
+model just outputs ~0.5 for every input regardless of what it sees.
+In short, `baseline_cnn` did not meaningfully learn in this run.
+
+This isn't a bug — it's an apples-to-oranges epoch count. A CNN
+trained from random initial weights typically needs 15–30+ epochs to
+start extracting useful features from raw pixels, especially with
+augmentation active from the first epoch. `mobilenetv2`, by contrast,
+starts from ImageNet-pretrained weights that already encode general
+visual features (edges, textures, shapes), so it only needs a few
+epochs to adapt those features to cats vs dogs specifically. Training
+both models for the same 5 epochs therefore isn't a fair comparison —
+it mainly demonstrates *why* transfer learning converges faster, not
+that the baseline architecture is incapable of learning.
+
+**To do:** re-run `baseline_cnn` with `training.epochs` set to ~20–30
+in `configs/config.yaml` to get a properly converged baseline number
+before treating this comparison as final.
 
 ## Project structure
 
