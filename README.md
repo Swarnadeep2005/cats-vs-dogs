@@ -5,14 +5,14 @@ reproducible ML pipeline with data augmentation, transfer learning,
 Docker-based serving, and CI.
 
 > This README is updated as each phase is completed. Currently covers
-> through Phase 2.
+> through Phase 3.
 
 ## Project status
 
 - [x] Phase 0 — Repo structure, config, data download script
 - [x] Phase 1 — Data pipeline & augmentation
 - [x] Phase 2 — Model: baseline CNN + MobileNetV2 transfer learning
-- [ ] Phase 3 — Evaluation
+- [x] Phase 3 — Evaluation
 - [ ] Phase 4 — Inference packaging
 - [ ] Phase 5 — Serving API
 - [ ] Phase 6 — Docker
@@ -87,31 +87,54 @@ and appends its config + final test/validation accuracy to
 `logs/runs.json`, so results from both architectures can be compared
 side by side.
 
-| Architecture | Val Accuracy | Test Accuracy | Test Loss | Epochs Trained |
-|---|---|---|---|---|
-| baseline_cnn | 49.85% | 48.08% | 0.6934 | 5 |
-| mobilenetv2 | 99.36% | 99.24% | 0.0189 | 5 (+5 fine-tune) |
+| Architecture | Val Accuracy | Test Accuracy | Test AUC |
+|---|---|---|---|
+| baseline_cnn | — | 77% | 0.8475 |
+| mobilenetv2 | — | 99% | 0.9998 |
 
-**Note on the baseline result:** 48% test accuracy is essentially
-chance-level for a binary classifier, and a test loss of 0.6934 is
-suspiciously close to `ln(2) ≈ 0.693` — the loss you get when a
-model just outputs ~0.5 for every input regardless of what it sees.
-In short, `baseline_cnn` did not meaningfully learn in this run.
+**Baseline CNN — Phase 3 result (after bug fix + full training):**
+An earlier training run had a bug (see git history / commit notes) where
+images were being normalized twice — once in the data pipeline and
+again inside the model — which pushed pixel values so close to zero
+that the model couldn't learn at all (48% accuracy, chance level).
+After removing the duplicate rescaling layer and training for a full
+20 epochs instead of 5, `baseline_cnn` reaches **77% test accuracy**
+with an AUC of 0.8475 (precision/recall/F1 ≈ 0.75–0.79 across both
+classes — see `logs/evaluation/baseline_cnn-v1/classification_report.txt`).
 
-This isn't a bug — it's an apples-to-oranges epoch count. A CNN
-trained from random initial weights typically needs 15–30+ epochs to
-start extracting useful features from raw pixels, especially with
-augmentation active from the first epoch. `mobilenetv2`, by contrast,
-starts from ImageNet-pretrained weights that already encode general
-visual features (edges, textures, shapes), so it only needs a few
-epochs to adapt those features to cats vs dogs specifically. Training
-both models for the same 5 epochs therefore isn't a fair comparison —
-it mainly demonstrates *why* transfer learning converges faster, not
-that the baseline architecture is incapable of learning.
+<p align="center">
+  <img src="docs/images/baseline_cnn_confusion_matrix.png" width="32%" />
+  <img src="docs/images/baseline_cnn_roc_curve.png" width="32%" />
+  <img src="docs/images/baseline_cnn_misclassified.png" width="32%" />
+</p>
 
-**To do:** re-run `baseline_cnn` with `training.epochs` set to ~20–30
-in `configs/config.yaml` to get a properly converged baseline number
-before treating this comparison as final.
+**MobileNetV2 — Phase 3 result:** reaches **99% test accuracy** with
+an AUC of 0.9998 and 0.99 precision/recall/F1 on both classes (see
+`logs/evaluation/mobilenetv2-v1/classification_report.txt`). This
+gap over the baseline is expected and is the core point of the
+comparison: MobileNetV2 starts from ImageNet-pretrained features
+(edges, textures, shapes learned from 1.4M images) and only needs to
+adapt them to cats vs dogs, while `baseline_cnn` has to learn all of
+that from scratch using ~16k training images — a much harder task
+that plateaus at a meaningfully lower ceiling given the same training
+budget.
+
+<p align="center">
+  <img src="docs/images/mobilenetv2_confusion_matrix.png" width="32%" />
+  <img src="docs/images/mobilenetv2_roc_curve.png" width="32%" />
+  <img src="docs/images/mobilenetv2_misclassified.png" width="32%" />
+</p>
+
+### Evaluation artifacts
+
+Running `python -m src.evaluate --model <path>` produces, per model,
+a confusion matrix, ROC curve, classification report, and a grid of
+misclassified examples, saved under `logs/evaluation/<model-name>/`:
+
+```bash
+python -m src.evaluate --model model/baseline_cnn-v1.keras
+python -m src.evaluate --model model/mobilenetv2-v1.keras
+```
 
 ## Project structure
 
@@ -123,9 +146,11 @@ cats-vs-dogs/
 │   ├── data/
 │   │   ├── download.py     # Kaggle dataset download (Phase 0)
 │   │   └── preprocess.py   # tf.data pipeline + augmentation (Phase 1)
-│   └── models/
-│       ├── model.py         # baseline CNN + transfer learning architectures (Phase 2)
-│       └── train.py         # training loop, callbacks, run logging (Phase 2)
+│   ├── models/
+│   │   ├── model.py         # baseline CNN + transfer learning architectures (Phase 2)
+│   │   └── train.py         # training loop, callbacks, run logging (Phase 2)
+│   └── evaluate.py         # confusion matrix, ROC-AUC, misclassified examples (Phase 3)
+├── docs/images/           # evaluation images embedded in this README (committed, not gitignored)
 ├── app/                   # FastAPI serving app (Phase 5)
 ├── frontend/              # Streamlit/Gradio demo (Phase 6)
 ├── model/                 # saved model artifacts (gitignored)

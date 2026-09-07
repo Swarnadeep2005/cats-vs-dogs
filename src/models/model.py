@@ -30,8 +30,11 @@ def build_baseline_cnn(input_shape: tuple, data_augmentation: keras.Sequential) 
         [
             keras.layers.Input(shape=input_shape),
             data_augmentation,
-            keras.layers.Rescaling(1.0 / 255),
-
+            # NOTE: no Rescaling layer here — preprocess.py's build_datasets()
+            # already normalizes images to [0, 1] in the tf.data pipeline.
+            # Adding Rescaling(1./255) here as well would double-normalize
+            # images down to a near-zero range, which stalls training
+            # (this was a real bug in an earlier version of this file).
             keras.layers.Conv2D(32, 3, activation="relu", padding="same"),
             keras.layers.MaxPooling2D(),
 
