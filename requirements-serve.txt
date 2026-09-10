@@ -1,0 +1,13 @@
+# Trimmed-down requirements for the serving container only.
+# No training dependencies (kaggle, scikit-learn, matplotlib) —
+# this keeps the Docker image built in Phase 6 significantly smaller
+# than one built from the full requirements.txt.
+
+tensorflow-cpu==2.16.1
+keras==3.3.3
+numpy==1.26.4
+pillow==10.3.0
+pyyaml==6.0.1
+fastapi==0.111.0
+uvicorn==0.30.1
+python-multipart==0.0.9
