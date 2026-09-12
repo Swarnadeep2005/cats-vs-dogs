@@ -1,0 +1,23 @@
+# Keeps the Docker build context small and fast — without this,
+# `docker build` would copy the entire dataset and .venv into the
+# build context before even starting, which is slow and pointless
+# since Dockerfiles explicitly COPY only what they need anyway.
+
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+data/raw/
+data/*.zip
+
+notebooks/
+docs/
+
+logs/
+*.log
+
+.env
+.DS_Store

@@ -1,0 +1,39 @@
+# Runs the serving API and the Streamlit demo as two separate
+# services on their own internal Docker network, mirroring a real
+# multi-service deployment rather than jamming everything into one
+# container.
+#
+# Usage:
+#   docker compose up --build
+# Then open http://localhost:8501 for the demo UI, or hit the API
+# directly at http://localhost:8000/docs.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the model directory read-only so a newly trained model
+      # can be picked up by restarting the container, without needing
+      # to rebuild the image just because model weights changed.
+      - ./model:/app/model:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    environment:
+      # "api" here is the service name above — Docker Compose's
+      # internal DNS resolves it to the api container's address,
+      # which is why this differs from the localhost:8000 you'd use
+      # when running the frontend outside Docker.
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped

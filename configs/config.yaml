@@ -11,7 +11,7 @@ data:
   seed: 42
 
 model:
-  architecture: "baseline_cnn"       # "baseline_cnn" or "mobilenetv2"
+  architecture: "mobilenetv2"       # "baseline_cnn" or "mobilenetv2"
   dropout: 0.2
 
 training:

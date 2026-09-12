@@ -1,0 +1,33 @@
+# Training container — heavier than Dockerfile.serve on purpose,
+# since it needs the full dependency set (kaggle CLI, scikit-learn,
+# matplotlib) that the serving image deliberately excludes.
+#
+# This is kept as a SEPARATE Dockerfile/image from serving rather
+# than one big image with everything, because: (1) the serving image
+# should be as small and fast-starting as possible since it's what
+# actually runs in production, and (2) training and serving have
+# different lifecycles — you rebuild/run this one occasionally to
+# produce a new model file, and rebuild the serving image far more
+# often as application code changes.
+
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src
+COPY configs/ ./configs
+
+# data/ and model/ are intentionally NOT copied in — they're meant to
+# be mounted as volumes at `docker run` time (see README), since the
+# dataset is large and the resulting model needs to persist on the
+# host after the container exits.
+
+CMD ["python", "-m", "src.models.train"]

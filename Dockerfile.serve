@@ -1,0 +1,60 @@
+# Multi-stage build: a "builder" stage installs dependencies into a
+# virtual environment, and the final stage copies only that venv plus
+# the app code — none of pip's build cache, compiler toolchains, or
+# apt package lists end up in the final image. This is the difference
+# between a ~2GB image and a much smaller one, and it's a detail that
+# signals real Docker experience rather than a copy-pasted Dockerfile.
+
+# ---- Stage 1: builder ----
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# libgl1/libglib2.0-0 are needed by opencv-python-headless at import
+# time even though we don't call OpenCV directly here — Pillow/TF's
+# image decoding paths can pull it in transitively.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements-serve.txt .
+RUN pip install --no-cache-dir -r requirements-serve.txt
+
+# ---- Stage 2: final runtime image ----
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Runtime needs the same shared libraries, but none of the build
+# tools used to install packages in stage 1.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Only the code and config actually needed to serve predictions —
+# not the training scripts, notebooks, or dataset.
+COPY app/ ./app
+COPY src/predict.py ./src/predict.py
+COPY src/data/preprocess.py ./src/data/preprocess.py
+COPY src/__init__.py ./src/__init__.py
+COPY src/data/__init__.py ./src/data/__init__.py
+COPY configs/ ./configs
+COPY model/ ./model
+
+EXPOSE 8000
+
+# A container-level healthcheck lets `docker ps` and orchestration
+# tools see service health directly, on top of the /health endpoint
+# itself being available for external checks.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
