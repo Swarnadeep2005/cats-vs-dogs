@@ -24,8 +24,10 @@ Design choices worth understanding:
 """
 
 from contextlib import asynccontextmanager
+from io import BytesIO
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from PIL import Image
 from pydantic import BaseModel
 
 from src.predict import load_trained_model, predict
@@ -72,12 +74,12 @@ def health():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_endpoint(file: UploadFile = File(...)):
-    if not app.state.model_loaded:
-        raise HTTPException(
-            status_code=503,
-            detail="Model is not loaded. Train a model and restart the service.",
-        )
-
+    # Validate the request itself first — file type and size are
+    # client-side problems (400) regardless of whether a model is
+    # loaded. Checking model_loaded first was a real bug: it made
+    # every request return 503 in any environment without a trained
+    # model (like a fresh CI checkout), even requests that were
+    # invalid for reasons that have nothing to do with the model.
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=400,
@@ -94,13 +96,33 @@ async def predict_endpoint(file: UploadFile = File(...)):
             detail=f"File too large ({size_mb:.1f}MB). Max size is {MAX_UPLOAD_SIZE_MB}MB.",
         )
 
+    # Validate the bytes are actually a decodable image before
+    # checking model state — this way "is this a valid image?" is
+    # answered consistently whether or not a model happens to be
+    # loaded (important for CI, which has no model file at all; see
+    # .gitignore and tests/test_api.py).
+    try:
+        Image.open(BytesIO(image_bytes)).verify()
+    except Exception:
+        # PIL can raise several different exception types depending
+        # on exactly what's wrong with the bytes (UnidentifiedImageError,
+        # OSError, struct errors on truncated files, etc.) — catching
+        # broadly here means any of these become a clean 400 instead
+        # of a raw 500.
+        raise HTTPException(status_code=400, detail="Could not process image: not a valid image file.")
+
+    # Only now do we need the model to actually exist.
+    if not app.state.model_loaded:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not loaded. Train a model and restart the service.",
+        )
+
     try:
         label, confidence = predict(image_bytes)
     except Exception as exc:
-        # Covers corrupt/unreadable image data — PIL raises various
-        # exception types depending on what's wrong with the file,
-        # so we catch broadly here and surface it as a clean 400
-        # rather than leaking a raw traceback to the client.
+        # Belt-and-suspenders: covers any other unreadable-image edge
+        # case predict() might hit that .verify() above didn't catch.
         raise HTTPException(status_code=400, detail=f"Could not process image: {exc}")
 
     return PredictionResponse(label=label, confidence=confidence)
