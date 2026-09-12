@@ -47,7 +47,16 @@ COPY src/data/preprocess.py ./src/data/preprocess.py
 COPY src/__init__.py ./src/__init__.py
 COPY src/data/__init__.py ./src/data/__init__.py
 COPY configs/ ./configs
-COPY model/ ./model
+
+# NOTE: model/ is intentionally NOT copied in here. The trained
+# model file is gitignored (see .gitignore) and never lives in the
+# image — it's mounted as a volume at `docker run` / `docker compose
+# up` time instead (see docker-compose.yml and the README's Docker
+# section). This lets you swap in a newly trained model just by
+# restarting the container, without rebuilding the image. We still
+# create an empty directory here so the app doesn't error out if the
+# volume happens not to be mounted.
+RUN mkdir -p model
 
 EXPOSE 8000
 
