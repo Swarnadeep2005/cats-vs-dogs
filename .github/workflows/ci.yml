@@ -1,0 +1,82 @@
+# Runs on every push and pull request against main. Two separate
+# jobs on purpose:
+#
+# 1. test — installs the full requirements.txt and runs pytest. This
+#    catches Python-level bugs (import errors, broken logic, the kind
+#    of thing tests/test_predict.py and tests/test_api.py check for).
+#
+# 2. docker-build — builds the serving image from Dockerfile.serve
+#    to confirm it actually compiles (correct paths, no missing
+#    files, valid Dockerfile syntax). This does NOT run the
+#    container or hit /health — a real request needs a trained
+#    model file, which isn't committed to the repo (see .gitignore).
+#    Confirming the image builds is still valuable: a broken
+#    Dockerfile is a common way for "works locally" code to fail
+#    silently until someone tries to deploy it.
+#
+# Both jobs run in parallel (no `needs:` dependency between them)
+# since they're independent checks — no reason to make one wait on
+# the other and slow down feedback.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run test suite
+        run: pytest -v
+        # Note: tests that need a trained model file (see
+        # tests/test_predict.py, tests/test_api.py) are
+        # self-skipping via @pytest.mark.skipif when no model is
+        # present — CI intentionally doesn't have one committed,
+        # since model files are large binaries that don't belong in
+        # git history (see .gitignore).
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build serving image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.serve
+          push: false
+          tags: catsdogs-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
