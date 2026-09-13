@@ -1,11 +1,13 @@
 # Cats vs Dogs Classifier
 
+![CI](https://github.com/Swarnadeep2005/cats-vs-dogs/actions/workflows/ci.yml/badge.svg)
+
 An image classification project upgraded from a single notebook into a
 reproducible ML pipeline with data augmentation, transfer learning,
 Docker-based serving, and CI.
 
 > This README is updated as each phase is completed. Currently covers
-> through Phase 6.
+> through Phase 7.
 
 ## Project status
 
@@ -16,7 +18,7 @@ Docker-based serving, and CI.
 - [x] Phase 4 — Inference packaging
 - [x] Phase 5 — Serving API
 - [x] Phase 6 — Docker
-- [ ] Phase 7 — CI/CD
+- [x] Phase 7 — CI/CD
 - [ ] Phase 8 — Documentation & polish
 
 ## Setup
@@ -233,6 +235,39 @@ used in `frontend/app.py`, was only added in Streamlit 1.40.0 — an
 earlier pin caused a `TypeError` at runtime when displaying the
 uploaded image.
 
+## CI/CD (Phase 7)
+
+`.github/workflows/ci.yml` runs on every push and pull request to
+`main`, with two independent jobs:
+
+- **`test`** — installs `requirements.txt` and runs `pytest`. Tests
+  that need a trained model file are self-skipping (see Phase 4/5),
+  since no model is committed to CI — they run for real coverage
+  when you run the suite locally after training.
+- **`docker-build`** — builds the `Dockerfile.serve` image to confirm
+  it compiles cleanly (valid syntax, correct file paths, no missing
+  dependencies). It doesn't run the container or hit `/health`,
+  since that would need a real trained model — it's a build-only
+  smoke test, using GitHub Actions' cache to keep repeat builds fast.
+
+Both jobs show up as checks on every commit and pull request in the
+GitHub UI — a green checkmark is a small but real signal that the
+code in this repo actually runs, not just "works on my machine."
+
+**Bugs CI actually caught:** the first CI run failed on both jobs,
+for reasons worth documenting rather than hiding. `docker-build`
+failed because `Dockerfile.serve` tried to `COPY` a `model/` folder
+that doesn't exist in a clean checkout (model files are gitignored
+by design) — fixed by mounting the model as a volume at runtime
+instead of baking it into the image. `test` failed because
+`/predict`'s error-check ordering leaked server state (whether a
+model happened to be loaded) into validation that should be
+independent of it — a request with a bad file type returned `503`
+instead of `400` whenever no model was present, which is exactly the
+situation CI runs in. Both are fixed now; the bugs are left in git
+history as-is, since a green CI badge that never caught anything
+proves less than one that did.
+
 ## Project structure
 
 ```
@@ -265,5 +300,6 @@ cats-vs-dogs/
 ├── Dockerfile.frontend    # Streamlit container image (Phase 6)
 ├── docker-compose.yml     # runs api + frontend together (Phase 6)
 ├── .dockerignore
+├── .github/workflows/ci.yml # tests + Docker build on every push (Phase 7)
 └── .gitignore
 ```
